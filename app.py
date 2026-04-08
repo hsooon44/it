@@ -3,37 +3,22 @@ import pandas as pd
 import os
 from datetime import datetime
 import io
-from twilio.rest import Client  # <--- إضافة مكتبة تويليو
+from twilio.rest import Client
 
-# --- إعدادات Twilio (احصل عليها من حسابك في Twilio Console) ---
+# --- 1. الإعدادات العامة (تعدل حسب بياناتك) ---
+ADMIN_USER = "admin"
+ADMIN_PASSWORD = "123123"
+
+# بيانات Twilio - استبدلها ببياناتك من موقع Twilio Console
 TWILIO_ACCOUNT_SID = 'ACxxxxxxxxxxxxxxxxxxxxxxxx' 
 TWILIO_AUTH_TOKEN = 'your_auth_token_here'
-TWILIO_WHATSAPP_FROM = 'whatsapp:+14155238886' # رقم الساند بوكس الافتراضي
-YOUR_WHATSAPP_NUMBER = 'whatsapp:+9665XXXXXXXX' # رقمك الشخصي (يجب أن يبدأ بـ +)
+TWILIO_WHATSAPP_FROM = 'whatsapp:+14155238886' 
+YOUR_WHATSAPP_NUMBER = 'whatsapp:+9665XXXXXXXX' 
 
-# --- دالة إرسال الواتساب ---
-def send_whatsapp_alert(ticket_id, name, dept, issue):
-    try:
-        client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
-        message_body = (
-            f"🎫 *طلب دعم جديد*\n\n"
-            f"*رقم الطلب:* {ticket_id}\n"
-            f"*المرسل:* {name}\n"
-            f"*القسم:* {dept}\n"
-            f"*المشكلة:* {issue}"
-        )
-        message = client.messages.create(
-            from_=TWILIO_WHATSAPP_FROM,
-            body=message_body,
-            to=YOUR_WHATSAPP_NUMBER
-        )
-        return True
-    except Exception as e:
-        print(f"خطأ في إرسال الواتساب: {e}")
-        return False
-
-# --- إعدادات قاعدة البيانات (نفس الكود السابق) ---
 DB_FILE = "tickets_db.csv"
+
+# --- 2. الدوال المساعدة ---
+
 def load_data():
     if os.path.exists(DB_FILE):
         return pd.read_csv(DB_FILE)
@@ -43,20 +28,38 @@ def load_data():
 def save_data(df):
     df.to_csv(DB_FILE, index=False)
 
-# --- الواجهة ---
+def to_excel(df):
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        df.to_excel(writer, index=False, sheet_name='Tickets')
+    return output.getvalue()
+
+def send_whatsapp_alert(ticket_id, name, dept, issue):
+    try:
+        client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
+        body = f"🎫 *طلب دعم جديد*\n\n*رقم:* {ticket_id}\n*المرسل:* {name}\n*الموقع:* {dept}\n*المشكلة:* {issue}"
+        client.messages.create(from_=TWILIO_WHATSAPP_FROM, body=body, to=YOUR_WHATSAPP_NUMBER)
+        return True
+    except:
+        return False
+
+# --- 3. بناء واجهة التطبيق ---
+
 st.set_page_config(page_title="نظام الدعم الفني", layout="wide")
 df = load_data()
 
-menu = ["إرسال طلب جديد", "لوحة تحكم الدعم الفني"]
-choice = st.sidebar.selectbox("اختر الواجهة", menu)
+# القائمة الجانبية (تمت إضافة key لتفادي خطأ التكرار)
+st.sidebar.title("القائمة الرئيسية")
+choice = st.sidebar.selectbox("اختر الواجهة", ["إرسال طلب جديد", "لوحة تحكم الدعم الفني"], key="main_nav")
 
+# --- واجهة الموظف ---
 if choice == "إرسال طلب جديد":
-    st.header("📝 تقديم طلب دعم")
-    with st.form("ticket_form"):
+    st.header("📝 نموذج تقديم طلب دعم")
+    with st.form("user_form", clear_on_submit=True):
         name = st.text_input("الاسم الكامل")
         dept = st.selectbox("الموقع", ["مستشفى الدرب العام"])
         issue = st.text_area("القسم")
-        issue = st.text_area("وصف المشكلة")
+        issue = st.text_area("وصف المشكلة بالتفصيل")
         submit = st.form_submit_button("إرسال الطلب")
         
         if submit:
@@ -70,22 +73,55 @@ if choice == "إرسال طلب جديد":
                 df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
                 save_data(df)
                 
-                # --- تشغيل تنبيه الواتساب هنا ---
-                with st.spinner('جاري إرسال تنبيه واتساب للفريق...'):
-                    success = send_whatsapp_alert(new_id, name, dept, issue)
-                    if success:
-                        st.success(f"تم إرسال الطلب بنجاح! رقم الطلب: {new_id}. تم تنبيه الفريق عبر واتساب ✅")
-                    else:
-                        st.warning(f"تم حفظ الطلب برقم {new_id}، ولكن فشل إرسال تنبيه الواتساب.")
+                # إرسال التنبيه
+                with st.spinner('جاري إرسال تنبيه واتساب...'):
+                    send_whatsapp_alert(new_id, name, dept, issue)
+                
+                st.success(f"✅ تم الإرسال! رقم الطلب: {new_id}")
             else:
-                st.error("يرجى تعبئة الحقول المطلوبة.")
+                st.error("⚠️ يرجى تعبئة جميع الحقول")
 
-# (باقي كود لوحة التحكم يظل كما هو دون تغيير)
+# --- واجهة الدعم الفني ---
 else:
-    st.info("سجل دخولك من القائمة الجانبية لإدارة الطلبات.")
-    # ... كود لوحة التحكم السابق ...
-import streamlit as st
-import pandas as pd
-import os
-from datetime import datetime
-import io
+    st.header("🛠️ لوحة تحكم فريق الدعم")
+    
+    # تسجيل الدخول
+    with st.sidebar.expander("🔐 تسجيل دخول الإدارة", expanded=True):
+        u = st.text_input("المستخدم")
+        p = st.text_input("كلمة المرور", type="password")
+
+    if u == ADMIN_USER and p == ADMIN_PASSWORD:
+        st.success("تم تسجيل الدخول بنجاح")
+        
+        # خيارات التصدير
+        col1, col2 = st.columns(2)
+        with col1:
+            excel_data = to_excel(df)
+            st.download_button("📥 تحميل ملف Excel", data=excel_data, 
+                             file_name=f"Tickets_{datetime.now().strftime('%Y-%m-%d')}.xlsx",
+                             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        with col2:
+            if st.button("🖨️ وضع الطباعة (PDF)"):
+                st.table(df)
+
+        st.divider()
+
+        # عرض وإدارة الطلبات
+        if not df.empty:
+            st.subheader("🔍 مراجعة الطلبات")
+            search = st.text_input("ابحث عن طلب...")
+            display_df = df[df.apply(lambda r: search.lower() in str(r).lower(), axis=1)] if search else df
+            st.dataframe(display_df, use_container_width=True)
+
+            st.divider()
+            
+            # الرد على الطلبات
+            pending = df[df['Status'] != "تم الحل"]['ID'].tolist()
+            if pending:
+                st.subheader("✍️ الرد على طلب معلق")
+                sid = st.selectbox("اختر رقم الطلب", pending)
+                r_text = st.text_area("الرد")
+                status = st.selectbox("تحديث الحالة", ["قيد المعالجة", "تم الحل"])
+                
+                if st.button("تحديث وحفظ"):
+                    idx = df[df['ID'] == sid].index
