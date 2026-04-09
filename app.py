@@ -127,7 +127,11 @@ with tab_admin:
         c_excel.write("##")
         c_excel.download_button("📤 Excel", data=to_excel(df), file_name="tickets.xlsx", use_container_width=True)
         
-        
+        # فلترة وعرض الجدول (وصف المشكلة سيظهر هنا)
+        display_df = df[df.apply(lambda row: search.lower() in row.astype(str).str.lower().values, axis=1)] if search else df
+        st.dataframe(display_df, use_container_width=True)
+
+        st.markdown("---")
         
         # قسم الرد وقسم الحذف
         all_ids = df['ID'].tolist()
@@ -139,9 +143,7 @@ with tab_admin:
                 sel_id = st.selectbox("ID", all_ids, key="sel_process")
                 idx = df[df['ID'] == sel_id].index[0]
                 
-                # عرض الوصف بوضوح للمسؤول
-                st.info(f"**وصف المشكلة:** {df.at[idx, 'IssueDesc']}")
-                
+                               
                 cs1, cs2 = st.columns(2)
                 new_stat = cs1.selectbox("تحديث الحالة", t[lang]["status_options"], key="stat_update")
                 new_rep = cs2.text_area("الرد الرسمي", value=df.at[idx, 'Reply'], key="rep_update")
