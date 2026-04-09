@@ -114,14 +114,14 @@ st.markdown(f"""
     }}
 
     /* تكبير الخطوط */
-    h1 {{ font-size: 3.5rem !important; font-weight: 900 !important; color: #4361ee !important; text-align: center; }}
-    h2 {{ font-size: 2.8rem !important; font-weight: 800 !important; text-align: center; }}
+    h1 {{ font-size: 2.5rem !important; font-weight: 700 !important; color: #4361ee !important; text-align: center; }}
+    h2 {{ font-size: 1.8rem !important; font-weight: 500 !important; text-align: center; }}
     
-    label, p {{ font-size: 1.6rem !important; font-weight: 700 !important; }}
+    label, p {{ font-size: 1.6rem !important; font-weight: 500 !important; }}
     
     input, textarea, [data-baseweb="select"] {{
         font-size: 1.4rem !important;
-        font-weight: 600 !important;
+        font-weight: 500 !important;
     }}
 
     .stButton>button {{
