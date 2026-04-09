@@ -29,8 +29,12 @@ def to_excel(df):
         df.to_excel(writer, index=False, sheet_name='Sheet1')
     return output.getvalue()
 
-# --- دالة حساب حالة الوقت بالألوان ---
-def get_time_status(date_str):
+# --- دالة حساب حالة الوقت بالألوان (محدثة لإيقاف العداد عند الحل) ---
+def get_time_status(date_str, status):
+    # إذا تم الحل، يظهر باللون الأخضر ويتوقف العداد
+    if status in ["تم الحل", "Resolved"]:
+        return "🟢 Resolved ✅"
+    
     try:
         start_time = datetime.strptime(date_str, "%Y-%m-%d %H:%M")
         duration = datetime.now() - start_time
@@ -67,7 +71,6 @@ with col_ar:
 
 lang = st.session_state.lang_choice
 
-# --- قاموس الترجمة الشامل ---
 t = {
     "العربية": {
         "title": "نظام الدعم الفني", "user_tab": "طلب دعم جديد", "admin_tab": "لوحة الإدارة",
@@ -180,7 +183,8 @@ with tab_admin:
         # إضافة عمود مدة الطلب الملون قبل العرض
         df_display = df.copy()
         if not df_display.empty:
-            df_display[t[lang]["time_col"]] = df_display['Date'].apply(get_time_status)
+            # تمرير التاريخ والحالة للدالة للتحقق من الحل
+            df_display[t[lang]["time_col"]] = df_display.apply(lambda x: get_time_status(x['Date'], x['Status']), axis=1)
             
             # فلترة البحث
             if search:
