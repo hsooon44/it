@@ -18,7 +18,6 @@ ADMIN_PASSWORD = "Dit@123123"
 def load_data():
     if os.path.exists(DB_FILE):
         return pd.read_csv(DB_FILE, dtype=str).fillna("")
-    # تم استبعاد IssueType نهائياً
     return pd.DataFrame(columns=["ID", "Name", "EmpID", "Email", "Department", "IssueDesc", "Status", "Reply", "Date"])
 
 def save_data(df):
@@ -68,7 +67,7 @@ t = {
     }
 }
 
-# --- 3. التنسيق (CSS) ---
+# --- 3. التنسيق (CSS) الحل الجذري لإخفاء المستطيل ---
 st.markdown(f"""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@700;900&display=swap');
@@ -77,10 +76,26 @@ st.markdown(f"""
     label, p {{ font-size: 1.4rem !important; font-weight: 700 !important; }}
     .stButton>button {{ font-size: 1.3rem !important; font-weight: 800 !important; border-radius: 10px !important; }}
     
-    /* منع وإخفاء مستطيل تغيير الحجم الصغير نهائياً */
-    textarea {{ resize: none !important; }}
-    [data-testid="stTextArea"] textarea {{ resize: none !important; }}
-    textarea::-webkit-resizer {{ display: none !important; background: transparent !important; }}
+    /* 1. منع تغيير الحجم لجميع مربعات النص */
+    textarea {{ 
+        resize: none !important; 
+    }}
+    
+    /* 2. استهداف الطبقات العميقة لإخفاء رمز التكبير تماماً */
+    [data-testid="stTextArea"] textarea {{
+        resize: none !important;
+    }}
+    
+    /* 3. إخفاء مقبض التغيير في متصفحات Chrome/Safari */
+    [data-testid="stTextArea"] textarea::-webkit-resizer {{
+        display: none !important;
+        -webkit-appearance: none !important;
+    }}
+
+    /* 4. إخفاء الحاوية التي قد تحمل مقبض التغيير */
+    .stTextArea div[data-baseweb="textarea"] {{
+        resize: none !important;
+    }}
 
     [data-testid="stSidebar"] {{ display: none; }}
     </style>
@@ -100,8 +115,10 @@ with tab_user:
         empid = c1.text_input(t[lang]["empid"])
         email = c2.text_input(t[lang]["email"])
         dept = c2.text_input(t[lang]["dept"])
-        # حقل وصف المشكلة (بدون إمكانية تغيير الحجم يدوياً)
+        
+        # حقل وصف المشكلة
         issue_desc = st.text_area(t[lang]["desc"], height=150) 
+        
         if st.form_submit_button(t[lang]["submit"]):
             if name and empid and issue_desc:
                 new_id = str(len(df) + 1001)
@@ -117,8 +134,8 @@ with tab_admin:
     if not st.session_state.logged_in:
         st.markdown(f"### {t[lang]['admin_tab']}")
         l_col1, l_col2, l_col3 = st.columns([1.5, 1.5, 0.6])
-        a_user = l_col1.text_input(t[lang]["user_field"] if "user_field" in t[lang] else "User", key="u_field")
-        a_pass = l_col2.text_input(t[lang]["pass_field"] if "pass_field" in t[lang] else "Password", type="password", key="p_field")
+        a_user = l_col1.text_input("User", key="u_field")
+        a_pass = l_col2.text_input("Password", type="password", key="p_field")
         st.write("##")
         if l_col3.button(t[lang]["login_btn"], use_container_width=True):
             if a_user == ADMIN_USER and a_pass == ADMIN_PASSWORD:
