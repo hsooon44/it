@@ -18,7 +18,6 @@ ADMIN_PASSWORD = "Dit@123123"
 def load_data():
     if os.path.exists(DB_FILE):
         return pd.read_csv(DB_FILE, dtype=str).fillna("")
-    # التأكد من وجود عمود IssueDesc في الأعمدة الافتراضية
     return pd.DataFrame(columns=["ID", "Name", "EmpID", "Email", "Department", "IssueDesc", "Status", "Reply", "Date"])
 
 def save_data(df):
@@ -56,7 +55,8 @@ t = {
         "dept": "🏢 القسم", "desc": "📝 وصف المشكلة", "submit": "إرسال الطلب",
         "status_options": ["جديد", "قيد المعالجة", "تم الحل", "لم يتم الحل"],
         "login_btn": "دخول", "search": "🔍 بحث...", "dir": "rtl",
-        "del_btn": "🗑️ حذف الطلب", "del_all": "🗑️ حذف كافة البيانات", "confirm": "تأكيد الحذف النهائي"
+        "del_btn": "🗑️ حذف الطلب", "del_all": "🗑️ حذف كافة البيانات", "confirm": "تأكيد الحذف النهائي",
+        "stats_total": "إجمالي الطلبات", "stats_new": "طلبات جديدة", "stats_proc": "قيد المعالجة", "stats_done": "تم الحل"
     },
     "English": {
         "title": "Support System", "user_tab": "New Ticket", "admin_tab": "Dashboard",
@@ -64,7 +64,8 @@ t = {
         "dept": "🏢 Department", "desc": "📝 Description", "submit": "Submit",
         "status_options": ["New", "In Progress", "Resolved", "Not Resolved"],
         "login_btn": "Login", "search": "🔍 Search...", "dir": "ltr",
-        "del_btn": "🗑️ Delete Ticket", "del_all": "🗑️ Delete All Data", "confirm": "Confirm Deletion"
+        "del_btn": "🗑️ Delete Ticket", "del_all": "🗑️ Delete All Data", "confirm": "Confirm Deletion",
+        "stats_total": "Total Tickets", "stats_new": "New", "stats_proc": "In Progress", "stats_done": "Resolved"
     }
 }
 
@@ -77,6 +78,12 @@ st.markdown(f"""
     h3 {{ font-size: 1.8rem !important; font-weight: 800 !important; }}
     label, p {{ font-size: 1.5rem !important; font-weight: 700 !important; }}
     .stButton>button {{ font-size: 1.3rem !important; font-weight: 800 !important; border-radius: 10px !important; }}
+    
+    /* إخفاء مقبض التكبير (المستطيل) */
+    textarea {{ resize: none !important; }}
+    [data-testid="stTextArea"] textarea {{ resize: none !important; }}
+    textarea::-webkit-resizer {{ display: none !important; }}
+
     [data-testid="stSidebar"] {{ display: none; }}
     </style>
     """, unsafe_allow_html=True)
@@ -95,7 +102,7 @@ with tab_user:
         empid = c1.text_input(t[lang]["empid"])
         email = c2.text_input(t[lang]["email"])
         dept = c2.text_input(t[lang]["dept"])
-        issue_desc = st.text_area(t[lang]["desc"]) 
+        issue_desc = st.text_area(t[lang]["desc"], height=150) 
         if st.form_submit_button(t[lang]["submit"]):
             if name and empid and issue_desc:
                 new_id = str(len(df) + 1001)
@@ -121,13 +128,25 @@ with tab_admin:
     if st.session_state.logged_in:
         st.markdown(f"### {t[lang]['admin_tab']}")
         
+        # --- قسم الداش بورد (Dashboard) ---
+        total_tix = len(df)
+        new_tix = len(df[df['Status'] == t[lang]["status_options"][0]])
+        proc_tix = len(df[df['Status'] == t[lang]["status_options"][1]])
+        done_tix = len(df[df['Status'] == t[lang]["status_options"][2]])
+
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric(t[lang]["stats_total"], total_tix)
+        m2.metric(t[lang]["stats_new"], new_tix, delta_color="normal")
+        m3.metric(t[lang]["stats_proc"], proc_tix)
+        m4.metric(t[lang]["stats_done"], done_tix)
+        st.divider()
+        
         # البحث وتصدير إكسل
         c_search, c_excel = st.columns([4, 1])
         search = c_search.text_input(t[lang]["search"])
         c_excel.write("##")
         c_excel.download_button("📤 Excel", data=to_excel(df), file_name="tickets.xlsx", use_container_width=True)
         
-        # فلترة وعرض الجدول (وصف المشكلة سيظهر هنا)
         display_df = df[df.apply(lambda row: search.lower() in row.astype(str).str.lower().values, axis=1)] if search else df
         st.dataframe(display_df, use_container_width=True)
 
@@ -143,10 +162,12 @@ with tab_admin:
                 sel_id = st.selectbox("ID", all_ids, key="sel_process")
                 idx = df[df['ID'] == sel_id].index[0]
                 
-                               
+                # عرض وصف المشكلة بوضوح للمسؤول
+                st.info(f"**وصف المشكلة:** {df.at[idx, 'IssueDesc']}")
+                
                 cs1, cs2 = st.columns(2)
                 new_stat = cs1.selectbox("تحديث الحالة", t[lang]["status_options"], key="stat_update")
-                new_rep = cs2.text_area("الرد الرسمي", value=df.at[idx, 'Reply'], key="rep_update")
+                new_rep = cs2.text_area("الرد الرسمي", value=df.at[idx, 'Reply'], key="rep_update", height=100)
                 
                 if st.button("تحديث البيانات ✅", use_container_width=True):
                     df.at[idx, 'Status'] = new_stat
@@ -155,7 +176,6 @@ with tab_admin:
 
             with col_delete:
                 st.subheader("🗑️ إدارة الحذف")
-                # حذف طلب واحد
                 d_id = st.selectbox(t[lang]["del_btn"], [None] + all_ids, key="d_sel_one")
                 if st.button(t[lang]["del_btn"], use_container_width=True):
                     if d_id:
@@ -163,7 +183,6 @@ with tab_admin:
                         save_data(df); st.rerun()
                 
                 st.divider()
-                # حذف الكل
                 st.warning(t[lang]["del_all"])
                 confirm = st.checkbox(t[lang]["confirm"], key="conf_del_all")
                 if st.button(t[lang]["del_all"], use_container_width=True):
