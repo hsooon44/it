@@ -18,6 +18,7 @@ ADMIN_PASSWORD = "Dit@123123"
 def load_data():
     if os.path.exists(DB_FILE):
         return pd.read_csv(DB_FILE, dtype=str).fillna("")
+    # تم استبعاد IssueType نهائياً
     return pd.DataFrame(columns=["ID", "Name", "EmpID", "Email", "Department", "IssueDesc", "Status", "Reply", "Date"])
 
 def save_data(df):
@@ -67,35 +68,19 @@ t = {
     }
 }
 
-# --- 3. التنسيق (CSS المحسن لإخفاء المقبض نهائياً) ---
+# --- 3. التنسيق (CSS) ---
 st.markdown(f"""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@700;900&display=swap');
-    
-    html, body, [data-testid="stAppViewContainer"] {{ 
-        font-family: 'Tajawal', sans-serif; 
-        direction: {t[lang]['dir']}; 
-    }}
-    
+    html, body, [data-testid="stAppViewContainer"] {{ font-family: 'Tajawal', sans-serif; direction: {t[lang]['dir']}; }}
     h1 {{ font-size: 3rem !important; font-weight: 900 !important; color: #4361ee !important; text-align: center; }}
     label, p {{ font-size: 1.4rem !important; font-weight: 700 !important; }}
     .stButton>button {{ font-size: 1.3rem !important; font-weight: 800 !important; border-radius: 10px !important; }}
     
-    /* منع تغيير الحجم وإخفاء المستطيل الصغير نهائياً لكافة المتصفحات */
-    textarea {{
-        resize: none !important;
-    }}
-    
-    /* استهداف محدد لعنصر Streamlit الذي يحتوي على المقبض */
-    [data-testid="stTextArea"] textarea {{
-        resize: none !important;
-    }}
-    
-    /* إخفاء أيقونة التكبير في الزاوية يدوياً لبعض المتصفحات */
-    textarea::-webkit-resizer {{
-        display: none !important;
-        background: transparent !important;
-    }}
+    /* منع وإخفاء مستطيل تغيير الحجم الصغير نهائياً */
+    textarea {{ resize: none !important; }}
+    [data-testid="stTextArea"] textarea {{ resize: none !important; }}
+    textarea::-webkit-resizer {{ display: none !important; background: transparent !important; }}
 
     [data-testid="stSidebar"] {{ display: none; }}
     </style>
@@ -115,7 +100,7 @@ with tab_user:
         empid = c1.text_input(t[lang]["empid"])
         email = c2.text_input(t[lang]["email"])
         dept = c2.text_input(t[lang]["dept"])
-        # تحديد الارتفاع لمنع الحاجة للتكبير اليدوي
+        # حقل وصف المشكلة (بدون إمكانية تغيير الحجم يدوياً)
         issue_desc = st.text_area(t[lang]["desc"], height=150) 
         if st.form_submit_button(t[lang]["submit"]):
             if name and empid and issue_desc:
@@ -130,10 +115,10 @@ with tab_admin:
         st_autorefresh(interval=10000, key="admin_ref")
 
     if not st.session_state.logged_in:
-        st.markdown(f"### {t[lang]['login_btn']}")
+        st.markdown(f"### {t[lang]['admin_tab']}")
         l_col1, l_col2, l_col3 = st.columns([1.5, 1.5, 0.6])
-        a_user = l_col1.text_input("User", key="u_field")
-        a_pass = l_col2.text_input("Pass", type="password", key="p_field")
+        a_user = l_col1.text_input(t[lang]["user_field"] if "user_field" in t[lang] else "User", key="u_field")
+        a_pass = l_col2.text_input(t[lang]["pass_field"] if "pass_field" in t[lang] else "Password", type="password", key="p_field")
         st.write("##")
         if l_col3.button(t[lang]["login_btn"], use_container_width=True):
             if a_user == ADMIN_USER and a_pass == ADMIN_PASSWORD:
