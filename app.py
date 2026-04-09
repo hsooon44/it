@@ -11,7 +11,8 @@ ADMIN_PASSWORD = "Dit@123123"
 
 def load_data():
     if os.path.exists(DB_FILE):
-        return pd.read_csv(DB_FILE)
+        # إضافة dtype=str لمنع أخطاء TypeError عند النشر
+        return pd.read_csv(DB_FILE, dtype=str).fillna("")
     else:
         return pd.DataFrame(columns=["ID", "Name", "EmpID", "Email", "Department", "IssueType", "IssueDesc", "Status", "Reply", "Date"])
 
@@ -20,6 +21,7 @@ def save_data(df):
 
 def to_excel(df):
     output = io.BytesIO()
+    # تحويل البيانات إلى Excel مع التأكد من حفظها كقيم نصية
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         df.to_excel(writer, index=False, sheet_name='Sheet1')
     return output.getvalue()
@@ -107,7 +109,7 @@ st.markdown(f"""
     /* زر الحذف بلون أحمر */
     div[data-testid="stButton"] button:contains("حذف"), 
     div[data-testid="stButton"] button:contains("Delete") {{
-        background-color: #ef233c;
+        background-color: #ef233c !important;
     }}
     </style>
     """, unsafe_allow_html=True)
@@ -130,7 +132,7 @@ if choice == t[lang]["user_tab"]:
         issue_desc = st.text_area(t[lang]["desc"])
         if st.form_submit_button(t[lang]["submit"]):
             if name and empid and dept and issue_desc:
-                new_id = len(df) + 1001
+                new_id = str(len(df) + 1001)
                 new_row = {"ID": new_id, "Name": name, "EmpID": empid, "Email": email, "Department": dept, "IssueType": issue_type, "IssueDesc": issue_desc, "Status": "New" if lang=="English" else "جديد", "Reply": "No reply", "Date": datetime.now().strftime("%Y-%m-%d %H:%M")}
                 df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
                 save_data(df)
@@ -173,8 +175,10 @@ else:
                 status_options = ["Resolved", "Pending"] if lang == "English" else ["تم الحل", "قيد المعالجة"]
                 new_status = st.selectbox(t[lang]["type"], status_options, key="status_select")
                 if st.button(t[lang]["reply_btn"]):
-                    idx = df[df['ID'] == selected_id].index[0]
-                    df.at[idx, 'Reply'], df.at[idx, 'Status'] = reply_text, new_status
+                    # استخدام iloc لتجنب أخطاء النوع Dtype Mismatch
+                    idx = df[df['ID'] == str(selected_id)].index[0]
+                    df.iloc[idx, df.columns.get_loc('Reply')] = str(reply_text)
+                    df.iloc[idx, df.columns.get_loc('Status')] = str(new_status)
                     save_data(df)
                     st.success("Updated!")
                     st.rerun()
@@ -185,7 +189,7 @@ else:
             del_id = st.selectbox(t[lang]["del_btn"], [None] + all_ids, key="del_id")
             if st.button(t[lang]["del_btn"]):
                 if del_id:
-                    df = df[df['ID'] != del_id]
+                    df = df[df['ID'] != str(del_id)]
                     save_data(df)
                     st.warning(f"Ticket {del_id} Deleted!")
                     st.rerun()
@@ -203,4 +207,6 @@ else:
                 else:
                     st.error("Please confirm check-box first!")
     else:
+        if admin_user or admin_pass:
+            st.error("Wrong credentials!")
         st.warning("Please login from sidebar")
