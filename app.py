@@ -9,7 +9,6 @@ import io
 # نظام الدعم الفني - جميع الحقوق محفوظة
 # ==========================================
 
-# محاولة استيراد مكتبة التحديث التلقائي
 try:
     from streamlit_autorefresh import st_autorefresh
 except ImportError:
@@ -60,17 +59,9 @@ if 'lang_choice' not in st.session_state:
     st.session_state.lang_choice = "العربية"
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
-# عداد لتحديث المفاتيح وتصفير الحقول
+# عداد لتصفير الحقول
 if 'form_iteration' not in st.session_state:
     st.session_state.form_iteration = 0
-
-col_spacer, col_en, col_ar = st.columns([10, 0.8, 0.8])
-with col_en:
-    if st.button("EN", use_container_width=True):
-        st.session_state.lang_choice = "English"; st.rerun()
-with col_ar:
-    if st.button("AR", use_container_width=True):
-        st.session_state.lang_choice = "العربية"; st.rerun()
 
 lang = st.session_state.lang_choice
 
@@ -111,21 +102,64 @@ t = {
     }
 }
 
+# --- 3. التنسيق (تعريض كافة الخطوط) ---
 st.markdown(f"""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@700;900&display=swap');
-    html, body, [data-testid="stAppViewContainer"] {{ font-family: 'Tajawal', sans-serif; direction: {t[lang]['dir']}; }}
-    h1 {{ font-size: 3rem !important; font-weight: 900 !important; color: #4361ee !important; text-align: center; }}
-    .stButton>button {{ font-size: 1.2rem !important; font-weight: 800 !important; border-radius: 10px !important; }}
-    textarea {{ resize: none !important; }}
+    
+    * {{
+        font-family: 'Tajawal', sans-serif !important;
+        font-weight: 800 !important; /* تعريض عام لجميع النصوص */
+    }}
+    
+    html, body, [data-testid="stAppViewContainer"] {{ 
+        direction: {t[lang]['dir']}; 
+    }}
+
+    h1 {{ font-size: 3.2rem !important; font-weight: 900 !important; color: #4361ee !important; text-align: center; }}
+    h3, .stSubheader {{ font-size: 1.8rem !important; font-weight: 900 !important; }}
+    
+    /* تعريض خطوط الجداول */
+    [data-testid="stTable"], [data-testid="stDataFrame"] {{ font-weight: 800 !important; }}
+    
+    /* تعريض خطوط الأزرار */
+    .stButton>button {{ 
+        font-size: 1.2rem !important; 
+        font-weight: 900 !important; 
+        border-radius: 10px !important; 
+    }}
+
+    /* تعريض خطوط حقول الإدخال */
+    input, textarea, [data-baseweb="select"] {{
+        font-weight: 800 !important;
+        font-size: 1.1rem !important;
+    }}
+
     [data-testid="stSidebar"] {{ display: none; }}
-    .footer {{ position: fixed; left: 0; bottom: 0; width: 100%; background-color: transparent; color: #888; text-align: center; font-size: 14px; padding: 10px; font-weight: bold; }}
+    
+    .footer {{ 
+        position: fixed; left: 0; bottom: 0; width: 100%; 
+        background-color: rgba(255,255,255,0.8); 
+        color: #333; text-align: center; font-size: 16px; 
+        padding: 10px; font-weight: 900 !important;
+        border-top: 1px solid #ddd;
+    }}
     </style>
     """, unsafe_allow_html=True)
+
+# أزرار اللغة
+col_spacer, col_en, col_ar = st.columns([10, 0.8, 0.8])
+with col_en:
+    if st.button("EN", use_container_width=True):
+        st.session_state.lang_choice = "English"; st.rerun()
+with col_ar:
+    if st.button("AR", use_container_width=True):
+        st.session_state.lang_choice = "العربية"; st.rerun()
 
 df = load_data()
 tab_user, tab_admin = st.tabs([f"🏠 {t[lang]['user_tab']}", f"📊 {t[lang]['admin_tab']}"])
 
+# --- واجهة المستخدم ---
 with tab_user:
     st.markdown(f"<h1>{t[lang]['title']}</h1>", unsafe_allow_html=True)
     with st.form("ticket_form", clear_on_submit=True):
@@ -142,6 +176,7 @@ with tab_user:
                 df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
                 save_data(df); st.success(f"Ticket ID: {new_id}")
 
+# --- واجهة الإدارة ---
 with tab_admin:
     if st_autorefresh:
         st_autorefresh(interval=10000, key="admin_ref")
@@ -186,16 +221,18 @@ with tab_admin:
                 st.info(f"**{t[lang]['desc']}:** {df.at[idx, 'IssueDesc']}")
                 
                 cs1, cs2 = st.columns(2)
-                # ربط المفتاح بالعداد لتصفير الحقل عند الزيادة
-                new_stat = cs1.selectbox(t[lang]["stat_label"], t[lang]["status_options"], key=f"stat_{st.session_state.form_iteration}")
-                new_rep = cs2.text_area(t[lang]["reply_label"], value=df.at[idx, 'Reply'], key=f"rep_{st.session_state.form_iteration}", height=100)
+                
+                # تحديث المفاتيح لضمان التصفير التام
+                new_stat = cs1.selectbox(t[lang]["stat_label"], t[lang]["status_options"], key=f"stat_key_{st.session_state.form_iteration}")
+                
+                # استخدام قيمة فارغة ابتدائية عند التحديث
+                new_rep = cs2.text_area(t[lang]["reply_label"], key=f"rep_key_{st.session_state.form_iteration}", height=100)
                 
                 if st.button(t[lang]["update_btn"], use_container_width=True):
                     df.at[idx, 'Status'] = new_stat
                     df.at[idx, 'Reply'] = new_rep
                     save_data(df)
-                    # زيادة العداد لتغيير الـ Key وتصفير الحقول
-                    st.session_state.form_iteration += 1
+                    st.session_state.form_iteration += 1 # تغيير الـ keys لتصفير الحقول
                     st.success(t[lang]["success_msg"])
                     st.rerun()
 
@@ -212,4 +249,5 @@ with tab_admin:
                         df = pd.DataFrame(columns=df.columns); save_data(df); st.rerun()
                     else: st.error(t[lang]["error_confirm"])
 
+# --- حقوق المهندس حسن زحيفي ---
 st.markdown(f'<div class="footer">{t[lang]["copyright"]}</div>', unsafe_allow_html=True)
