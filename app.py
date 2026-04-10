@@ -221,21 +221,23 @@ with tab_admin:
                 st.info(f"**{t[lang]['desc']}:** {df.at[idx, 'IssueDesc']}")
                 
                 cs1, cs2 = st.columns(2)
-                # استخدام index=0 للبدء من جديد دائماً
-                new_stat = cs1.selectbox(t[lang]["stat_label"], t[lang]["status_options"], key="stat_update")
-                new_rep = cs2.text_area(t[lang]["reply_label"], value=df.at[idx, 'Reply'], key="rep_update", height=100)
+                
+                # إعداد الحالة والرد مع مفاتيح فريدة للتحكم بها
+                new_stat = cs1.selectbox(t[lang]["stat_label"], t[lang]["status_options"], key="stat_input")
+                new_rep = cs2.text_area(t[lang]["reply_label"], value=df.at[idx, 'Reply'], key="rep_input", height=100)
                 
                 if st.button(t[lang]["update_btn"], use_container_width=True):
+                    # 1. تحديث البيانات
                     df.at[idx, 'Status'] = new_stat
                     df.at[idx, 'Reply'] = new_rep
                     save_data(df)
                     
-                    # --- تصفير الخانات برمجياً ---
-                    if "stat_update" in st.session_state: del st.session_state["stat_update"]
-                    if "rep_update" in st.session_state: del st.session_state["rep_update"]
+                    # 2. تصفير الحقول عن طريق مسحها من session_state
+                    st.session_state["stat_input"] = t[lang]["status_options"][0]
+                    st.session_state["rep_input"] = ""
                     
                     st.success(t[lang]["success_msg"])
-                    st.rerun()
+                    st.rerun() # إعادة التشغيل لتطبيق المسح
 
             with col_delete:
                 st.subheader(t[lang]["del_section"])
@@ -254,5 +256,5 @@ with tab_admin:
                     else:
                         st.error(t[lang]["error_confirm"])
 
-# --- الحقوق في أسفل البرنامج ---
+# --- الحقوق الثابتة في الأسفل ---
 st.markdown(f'<div class="footer">{t[lang]["copyright"]}</div>', unsafe_allow_html=True)
