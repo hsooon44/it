@@ -109,29 +109,29 @@ st.markdown(f"""
     
     * {{
         font-family: 'Tajawal', sans-serif !important;
-        font-weight: 800 !important; /* تعريض عام لجميع النصوص */
+        font-weight: 500 !important; /* تعريض عام لجميع النصوص */
     }}
     
     html, body, [data-testid="stAppViewContainer"] {{ 
         direction: {t[lang]['dir']}; 
     }}
 
-    h1 {{ font-size: 3.2rem !important; font-weight: 900 !important; color: #4361ee !important; text-align: center; }}
-    h3, .stSubheader {{ font-size: 1.8rem !important; font-weight: 900 !important; }}
+    h1 {{ font-size: 3.2rem !important; font-weight: 500 !important; color: #4361ee !important; text-align: center; }}
+    h3, .stSubheader {{ font-size: 1.8rem !important; font-weight: 500 !important; }}
     
     /* تعريض خطوط الجداول */
-    [data-testid="stTable"], [data-testid="stDataFrame"] {{ font-weight: 800 !important; }}
+    [data-testid="stTable"], [data-testid="stDataFrame"] {{ font-weight: 500 !important; }}
     
     /* تعريض خطوط الأزرار */
     .stButton>button {{ 
         font-size: 1.2rem !important; 
-        font-weight: 900 !important; 
+        font-weight: 500 !important; 
         border-radius: 10px !important; 
     }}
 
     /* تعريض خطوط حقول الإدخال */
     input, textarea, [data-baseweb="select"] {{
-        font-weight: 800 !important;
+        font-weight: 500 !important;
         font-size: 1.1rem !important;
     }}
 
@@ -141,7 +141,7 @@ st.markdown(f"""
         position: fixed; left: 0; bottom: 0; width: 100%; 
         background-color: rgba(255,255,255,0.8); 
         color: #333; text-align: center; font-size: 16px; 
-        padding: 10px; font-weight: 900 !important;
+        padding: 10px; font-weight: 500 !important;
         border-top: 1px solid #ddd;
     }}
     </style>
