@@ -1,253 +1,193 @@
-import streamlit as st
-import pandas as pd
+import telebot
+import requests
+from telebot import types
+import yt_dlp
 import os
-from datetime import datetime
-import io
+import time
+import sqlite3
+import ctypes
 
-# ==========================================
-# إعداد المهندس / حسن زحيفي
-# نظام الدعم الفني - جميع الحقوق محفوظة
-# ==========================================
-
+# --- إعدادات الهوية البرمجية للمهندس حسن ---
 try:
-    from streamlit_autorefresh import st_autorefresh
-except ImportError:
-    st_autorefresh = None
+    myappid = 'hassan.zuhayfi.megabot.v5.0' 
+    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+except: pass
 
-# --- 1. الإعدادات وقاعدة البيانات ---
-DB_FILE = "tickets_db.csv"
-ADMIN_USER = "admin"
-ADMIN_PASSWORD = "Dit@123123"
+# --- الإعدادات الأساسية ---
+API_TOKEN = '7607475672:AAEJCLDxHozjb2r-1yCzyKPZVos-Cer6nLo'
+ADMIN_ID = 6884706957 
+bot = telebot.TeleBot(API_TOKEN)
 
-def load_data():
-    if os.path.exists(DB_FILE):
-        return pd.read_csv(DB_FILE, dtype=str).fillna("")
-    return pd.DataFrame(columns=["ID", "Name", "EmpID", "Email", "Department", "IssueDesc", "Status", "Reply", "Date"])
+# الحقوق والإعدادات
+DEV_CREDITS = "\n\n**المبرمج: المهندس حسن زحيفي**"
+DISCLAIMER = "\n\n**⚠️ أنا بريء من أي استخدام سيئ لهذا البوت**"
+DB_NAME = "bot_database.db"
+TIKTOK_URL = "https://www.tiktok.com/@hsooon44"
+SNAP_URL = "https://www.snapchat.com/add/hso-04"
 
-def save_data(df):
-    df.to_csv(DB_FILE, index=False)
+# --- وظائف قاعدة البيانات (القلب النابض للبوت) ---
+def init_db():
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    # جدول المستخدمين (لحفظ الأسماء والزيارات)
+    cursor.execute('''CREATE TABLE IF NOT EXISTS users (
+        user_id INTEGER PRIMARY KEY, 
+        username TEXT, 
+        first_name TEXT, 
+        join_date TEXT, 
+        is_blocked INTEGER DEFAULT 0)''')
+    # جدول التحميلات (لحفظ الروابط والمنصات)
+    cursor.execute('''CREATE TABLE IF NOT EXISTS downloads (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, 
+        user_id INTEGER, 
+        platform TEXT, 
+        url TEXT, 
+        date TEXT)''')
+    conn.commit()
+    conn.close()
 
-def to_excel(df):
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        df.to_excel(writer, index=False, sheet_name='Sheet1')
-    return output.getvalue()
+def log_user(m):
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    cursor.execute('''INSERT INTO users (user_id, username, first_name, join_date) 
+                      VALUES (?, ?, ?, ?) ON CONFLICT(user_id) 
+                      DO UPDATE SET username=excluded.username, first_name=excluded.first_name''',
+                   (m.from_user.id, m.from_user.username, m.from_user.first_name, time.strftime("%Y-%m-%d %H:%M:%S")))
+    conn.commit()
+    conn.close()
 
-def get_time_status(date_str, status):
-    if status in ["تم الحل", "Resolved"]:
-        return "🟢 Resolved ✅"
-    try:
-        start_time = datetime.strptime(date_str, "%Y-%m-%d %H:%M")
-        duration = datetime.now() - start_time
-        total_minutes = int(duration.total_seconds() / 60)
-        if total_minutes <= 60:
-            return f"🟢 {total_minutes} min"
-        elif 60 < total_minutes <= 180:
-            hours = total_minutes // 60
-            mins = total_minutes % 60
-            return f"🟡 {hours}h {mins}m"
-        else:
-            hours = total_minutes // 60
-            return f"🔴 {hours}h+"
-    except:
-        return "⚪ N/A"
+def log_download(uid, platform, url):
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    cursor.execute('INSERT INTO downloads (user_id, platform, url, date) VALUES (?, ?, ?, ?)',
+                   (uid, platform, url, time.strftime("%Y-%m-%d %H:%M:%S")))
+    conn.commit()
+    conn.close()
 
-# --- 2. إعدادات الصفحة ---
-st.set_page_config(page_title="Support System", layout="wide")
+init_db()
 
-if 'lang_choice' not in st.session_state:
-    st.session_state.lang_choice = "العربية"
-if 'logged_in' not in st.session_state:
-    st.session_state.logged_in = False
-# عداد لتصفير الحقول
-if 'form_iteration' not in st.session_state:
-    st.session_state.form_iteration = 0
+# --- واجهة الأزرار ---
+def get_markup():
+    markup = types.InlineKeyboardMarkup(row_width=1)
+    markup.add(types.InlineKeyboardButton("تابعني تيك توك 🎵", url=TIKTOK_URL),
+               types.InlineKeyboardButton("تابعني سناب شات 👻", url=SNAP_URL))
+    return markup
 
-lang = st.session_state.lang_choice
-
-t = {
-    "العربية": {
-        "title": "نظام الدعم الفني", "user_tab": "طلب دعم جديد", "admin_tab": "لوحة الإدارة",
-        "name": "👤 الاسم الكامل", "empid": "🆔 الرقم الوظيفي", "email": "📧 البريد الإلكتروني",
-        "dept": "🏢 القسم", "desc": "📝 وصف المشكلة", "submit": "إرسال الطلب",
-        "status_options": ["جديد", "قيد المعالجة", "تم الحل", "لم يتم الحل"],
-        "login_btn": "دخول", "search": "🔍 بحث...", "dir": "rtl",
-        "user_label": "اسم المستخدم", "pass_label": "كلمة المرور",
-        "manage_title": "⚙️ معالجة الطلب", "update_btn": "تحديث البيانات ✅",
-        "reply_label": "الرد الرسمي", "stat_label": "تحديث الحالة",
-        "del_section": "🗑️ إدارة الحذف", "del_btn": "🗑️ حذف الطلب", 
-        "del_all": "🗑️ حذف كافة البيانات", "confirm": "تأكيد الحذف النهائي",
-        "stats_total": "إجمالي الطلبات", "stats_new": "طلبات جديدة", 
-        "stats_proc": "قيد المعالجة", "stats_done": "تم الحل",
-        "success_msg": "تم التحديث بنجاح", "error_confirm": "يرجى التأكيد أولاً",
-        "time_col": "⏱️ مدة الطلب",
-        "copyright": "إعداد المهندس / حسن زحيفي"
-    },
-    "English": {
-        "title": "Technical Support System", "user_tab": "New Ticket", "admin_tab": "Admin Dashboard",
-        "name": "👤 Full Name", "empid": "🆔 Employee ID", "email": "📧 Email",
-        "dept": "🏢 Department", "desc": "📝 Issue Description", "submit": "Submit Ticket",
-        "status_options": ["New", "In Progress", "Resolved", "Not Resolved"],
-        "login_btn": "Login", "search": "🔍 Search...", "dir": "ltr",
-        "user_label": "Username", "pass_label": "Password",
-        "manage_title": "⚙️ Ticket Processing", "update_btn": "Update Data ✅",
-        "reply_label": "Official Reply", "stat_label": "Update Status",
-        "del_section": "🗑️ Delete Management", "del_btn": "🗑️ Delete Ticket", 
-        "del_all": "🗑️ Wipe All Data", "confirm": "Confirm Final Deletion",
-        "stats_total": "Total Tickets", "stats_new": "New", 
-        "stats_proc": "In Progress", "stats_done": "Resolved",
-        "success_msg": "Updated Successfully", "error_confirm": "Please confirm first",
-        "time_col": "⏱️ Ticket Duration",
-        "copyright": "Prepared by Engr. Hassan Zuhayfi"
+# --- محرك التحميل العالمي ---
+def download_universal(url, chat_id, status_id, platform):
+    ydl_opts = {
+        'format': 'best',
+        'outtmpl': f'downloads/%(id)s.%(ext)s',
+        'quiet': True,
+        'headers': {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0.0.0 Safari/537.36'}
     }
-}
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=True)
+            file_path = ydl.prepare_filename(info)
+            with open(file_path, 'rb') as video:
+                bot.send_video(chat_id, video, caption=f"✅ من {platform}\n{DEV_CREDITS}", reply_markup=get_markup())
+            os.remove(file_path)
+            bot.delete_message(chat_id, status_id)
+            log_download(chat_id, platform, url)
+            return True
+    except: return False
 
-# --- 3. التنسيق (تعريض كافة الخطوط) ---
-st.markdown(f"""
-    <style>
-    @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@700;900&display=swap');
-    
-    * {{
-        font-family: 'Tajawal', sans-serif !important;
-        font-weight: 500 !important; /* تعريض عام لجميع النصوص */
-    }}
-    
-    html, body, [data-testid="stAppViewContainer"] {{ 
-        direction: {t[lang]['dir']}; 
-    }}
+# --- أوامر الإدارة (للمطور حسن زحيفي) ---
+@bot.message_handler(commands=['admin'])
+def admin_panel(message):
+    if message.from_user.id == ADMIN_ID:
+        conn = sqlite3.connect(DB_NAME); c = conn.cursor()
+        c.execute('SELECT COUNT(*) FROM users'); u_count = c.fetchone()[0]
+        c.execute('SELECT COUNT(*) FROM downloads'); d_count = c.fetchone()[0]
+        conn.close()
+        msg = (f"📊 **لوحة التحكم - المهندس حسن**\n━━━━━━━━━━━━━━━\n"
+               f"👥 المستخدمين: {u_count}\n📥 إجمالي الروابط المحملة: {d_count}\n━━━━━━━━━━━━━━━\n"
+               f"📣 للإذاعة: `/broadcast النص`\n📥 للتقرير: `/export`\n🚫 للحظر: `/block ID`")
+        bot.reply_to(message, msg, parse_mode='Markdown')
 
-    h1 {{ font-size: 3.2rem !important; font-weight: 500 !important; color: #4361ee !important; text-align: center; }}
-    h3, .stSubheader {{ font-size: 1.8rem !important; font-weight: 500 !important; }}
-    
-    /* تعريض خطوط الجداول */
-    [data-testid="stTable"], [data-testid="stDataFrame"] {{ font-weight: 500 !important; }}
-    
-    /* تعريض خطوط الأزرار */
-    .stButton>button {{ 
-        font-size: 1.2rem !important; 
-        font-weight: 500 !important; 
-        border-radius: 10px !important; 
-    }}
-
-    /* تعريض خطوط حقول الإدخال */
-    input, textarea, [data-baseweb="select"] {{
-        font-weight: 500 !important;
-        font-size: 1.1rem !important;
-    }}
-
-    [data-testid="stSidebar"] {{ display: none; }}
-    
-    .footer {{ 
-        position: fixed; left: 0; bottom: 0; width: 100%; 
-        background-color: rgba(255,255,255,0.8); 
-        color: #333; text-align: center; font-size: 16px; 
-        padding: 10px; font-weight: 500 !important;
-        border-top: 1px solid #ddd;
-    }}
-    </style>
-    """, unsafe_allow_html=True)
-
-# أزرار اللغة
-col_spacer, col_en, col_ar = st.columns([10, 0.8, 0.8])
-with col_en:
-    if st.button("EN", use_container_width=True):
-        st.session_state.lang_choice = "English"; st.rerun()
-with col_ar:
-    if st.button("AR", use_container_width=True):
-        st.session_state.lang_choice = "العربية"; st.rerun()
-
-df = load_data()
-tab_user, tab_admin = st.tabs([f"🏠 {t[lang]['user_tab']}", f"📊 {t[lang]['admin_tab']}"])
-
-# --- واجهة المستخدم ---
-with tab_user:
-    st.markdown(f"<h1>{t[lang]['title']}</h1>", unsafe_allow_html=True)
-    with st.form("ticket_form", clear_on_submit=True):
-        c1, c2 = st.columns(2)
-        name = c1.text_input(t[lang]["name"])
-        empid = c1.text_input(t[lang]["empid"])
-        email = c2.text_input(t[lang]["email"])
-        dept = c2.text_input(t[lang]["dept"])
-        issue_desc = st.text_area(t[lang]["desc"], height=150) 
-        if st.form_submit_button(t[lang]["submit"]):
-            if name and empid and issue_desc:
-                new_id = str(len(df) + 1001)
-                new_row = {"ID": new_id, "Name": name, "EmpID": empid, "Email": email, "Department": dept, "IssueDesc": issue_desc, "Status": t[lang]["status_options"][0], "Reply": "---", "Date": datetime.now().strftime("%Y-%m-%d %H:%M")}
-                df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
-                save_data(df); st.success(f"Ticket ID: {new_id}")
-
-# --- واجهة الإدارة ---
-with tab_admin:
-    if st_autorefresh:
-        st_autorefresh(interval=10000, key="admin_ref")
-
-    if not st.session_state.logged_in:
-        st.markdown(f"### {t[lang]['login_btn']}")
-        l_col1, l_col2, l_col3 = st.columns([1.5, 1.5, 0.6])
-        a_user = l_col1.text_input(t[lang]["user_label"], key="u_field")
-        a_pass = l_col2.text_input(t[lang]["pass_label"], type="password", key="p_field")
-        if l_col3.button(t[lang]["login_btn"], use_container_width=True):
-            if a_user == ADMIN_USER and a_pass == ADMIN_PASSWORD:
-                st.session_state.logged_in = True; st.rerun()
-
-    if st.session_state.logged_in:
-        st.markdown(f"### {t[lang]['admin_tab']}")
-        stats = {"total": len(df), "new": len(df[df['Status'].isin(["جديد", "New"])]), "proc": len(df[df['Status'].isin(["قيد المعالجة", "In Progress"])]), "done": len(df[df['Status'].isin(["تم الحل", "Resolved"])])}
-        m1, m2, m3, m4 = st.columns(4)
-        m1.metric(t[lang]["stats_total"], stats["total"]); m2.metric(t[lang]["stats_new"], stats["new"]); m3.metric(t[lang]["stats_proc"], stats["proc"]); m4.metric(t[lang]["stats_done"], stats["done"])
-        st.divider()
+@bot.message_handler(commands=['broadcast'])
+def broadcast_command(message):
+    if message.from_user.id == ADMIN_ID:
+        text = message.text.replace('/broadcast', '').strip()
+        if not text: return bot.reply_to(message, "⚠️ يرجى كتابة النص بعد الأمر.")
         
-        c_search, c_excel = st.columns([4, 1])
-        search = c_search.text_input(t[lang]["search"])
-        c_excel.write("##")
-        c_excel.download_button("📤 Excel", data=to_excel(df), file_name="tickets.xlsx", use_container_width=True)
+        conn = sqlite3.connect(DB_NAME); c = conn.cursor()
+        c.execute('SELECT user_id FROM users'); users = c.fetchall()
+        conn.close()
         
-        df_display = df.copy()
-        if not df_display.empty:
-            df_display[t[lang]["time_col"]] = df_display.apply(lambda x: get_time_status(x['Date'], x['Status']), axis=1)
-            if search:
-                df_display = df_display[df_display.apply(lambda row: search.lower() in row.astype(str).str.lower().values, axis=1)]
-            cols = [t[lang]["time_col"]] + [c for c in df_display.columns if c != t[lang]["time_col"]]
-            st.dataframe(df_display[cols], use_container_width=True, hide_index=True)
-        
-        st.markdown("---")
-        all_ids = df['ID'].tolist()
-        if all_ids:
-            col_manage, col_delete = st.columns([2, 1])
-            with col_manage:
-                st.subheader(t[lang]["manage_title"])
-                sel_id = st.selectbox("ID", all_ids, key="sel_process")
-                idx = df[df['ID'] == sel_id].index[0]
-                st.info(f"**{t[lang]['desc']}:** {df.at[idx, 'IssueDesc']}")
-                
-                cs1, cs2 = st.columns(2)
-                
-                # تحديث المفاتيح لضمان التصفير التام
-                new_stat = cs1.selectbox(t[lang]["stat_label"], t[lang]["status_options"], key=f"stat_key_{st.session_state.form_iteration}")
-                
-                # استخدام قيمة فارغة ابتدائية عند التحديث
-                new_rep = cs2.text_area(t[lang]["reply_label"], key=f"rep_key_{st.session_state.form_iteration}", height=100)
-                
-                if st.button(t[lang]["update_btn"], use_container_width=True):
-                    df.at[idx, 'Status'] = new_stat
-                    df.at[idx, 'Reply'] = new_rep
-                    save_data(df)
-                    st.session_state.form_iteration += 1 # تغيير الـ keys لتصفير الحقول
-                    st.success(t[lang]["success_msg"])
-                    st.rerun()
+        bot.send_message(ADMIN_ID, f"🚀 جاري الإرسال لـ {len(users)} مستخدم...")
+        s, f = 0, 0
+        for (uid,) in users:
+            try:
+                bot.send_message(uid, f"📢 **إعلان هام من الإدارة:**\n\n{text}{DEV_CREDITS}", parse_mode='Markdown')
+                s += 1
+                time.sleep(0.1) # لتجنب حظر التلجرام للبوت
+            except: f += 1
+        bot.send_message(ADMIN_ID, f"✅ اكتملت الإذاعة!\nنجاح: {s} | فشل: {f}")
 
-            with col_delete:
-                st.subheader(t[lang]["del_section"])
-                d_id = st.selectbox(t[lang]["del_btn"], [None] + all_ids, key="d_sel_one")
-                if st.button(t[lang]["del_btn"], use_container_width=True):
-                    if d_id:
-                        df = df[df['ID'] != d_id]; save_data(df); st.rerun()
-                st.divider()
-                confirm = st.checkbox(t[lang]["confirm"], key="conf_del_all")
-                if st.button(t[lang]["del_all"], use_container_width=True):
-                    if confirm:
-                        df = pd.DataFrame(columns=df.columns); save_data(df); st.rerun()
-                    else: st.error(t[lang]["error_confirm"])
+@bot.message_handler(commands=['export'])
+def export_data(message):
+    if message.from_user.id == ADMIN_ID:
+        conn = sqlite3.connect(DB_NAME); c = conn.cursor()
+        c.execute('SELECT * FROM users'); users = c.fetchall()
+        with open("users_report.txt", "w", encoding="utf-8") as f:
+            for u in users: f.write(f"ID: {u[0]} | User: @{u[1]} | Name: {u[2]} | Joined: {u[3]}\n")
+        with open("users_report.txt", "rb") as f:
+            bot.send_document(ADMIN_ID, f, caption="✅ تقرير المشتركين الكامل.")
+        os.remove("users_report.txt")
 
-# --- حقوق المهندس حسن زحيفي ---
-st.markdown(f'<div class="footer">{t[lang]["copyright"]}</div>', unsafe_allow_html=True)
+# --- معالجة الروابط ---
+@bot.message_handler(func=lambda m: True)
+def main_handler(message):
+    log_user(message) # تسجيل الزيارة والاسم تلقائياً
+    url = message.text
+    platform = None
+    if 'tiktok.com' in url: platform = "TikTok"
+    elif 'instagram.com' in url: platform = "Instagram"
+    elif 'twitter.com' in url or 'x.com' in url: platform = "X/Twitter"
+    elif 'youtube.com' in url or 'youtu.be' in url: platform = "YouTube"
+    
+    if not platform: return
+
+    status_msg = bot.reply_to(message, f"🔍 جاري التحميل من {platform}... ⏳")
+    
+    if platform == "TikTok":
+        try:
+            res = requests.post("https://www.tikwm.com/api/", data={'url': url}).json()
+            if res.get('code') == 0:
+                data = res['data']
+                if 'images' in data:
+                    bot.send_media_group(message.chat.id, [types.InputMediaPhoto(img) for img in data['images'][:10]])
+                else:
+                    bot.send_video(message.chat.id, data['play'], caption=f"✅ تم\n{DEV_CREDITS}")
+                bot.delete_message(message.chat.id, status_msg.message_id)
+                log_download(message.from_user.id, platform, url)
+                return
+        except: pass
+
+    if not download_universal(url, message.chat.id, status_msg.message_id, platform):
+        bot.edit_message_text("❌ فشل التحميل. تأكد أن الرابط عام.", message.chat.id, status_msg.message_id)
+
+@bot.message_handler(commands=['start'])
+def welcome(message):
+    log_user(message)
+    bot.reply_to(message, f"👋 أهلاً المهندس {message.from_user.first_name}\nأرسل أي رابط للتحميل فوراً.", reply_markup=get_markup())
+
+    
+def resource_path(relative_path):
+    """ الحصول على المسار المطلق للموارد (يعمل في التطوير وفي EXE) """
+    try:
+        # PyInstaller ينشئ مجلد مؤقت ويخزن المسار في _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
+
+# الآن نستخدمها لجلب الأيقونة
+icon_path = resource_path("logo.png")
+
+if __name__ == "__main__":
+    if not os.path.exists('downloads'): os.makedirs('downloads')
+    print("🚀 بوت المهندس حسن زحيفي V5.0 قيد التشغيل...")
+    bot.infinity_polling()
